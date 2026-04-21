@@ -30,8 +30,16 @@
         <div class="section">
           <label for="sprite-size">Sprite Size</label>
           <select id="sprite-size" v-model.number="state.spriteSize">
-            <option v-for="size in spriteSizes" :key="size" :value="size">{{ size }}×{{ size }}</option>
+            <option v-for="size in spriteSizes" :key="size" :value="size">{{ size }}x{{ size }}</option>
           </select>
+        </div>
+        <div class="section toggle-row">
+          <label for="real-size">Real Size</label>
+          <label class="switch" for="real-size">
+            <input id="real-size" type="checkbox" v-model="state.realSize" />
+            <span aria-hidden="true" class="switch-track"></span>
+            <span class="switch-label">{{ state.realSize ? "On" : "Scaled" }}</span>
+          </label>
         </div>
         <div class="section">
           <label for="fps">FPS</label>
@@ -46,12 +54,12 @@
     <section class="panel preview-panel">
       <h2>Live Preview</h2>
       <div class="preview-canvas-wrapper">
-        <canvas ref="previewCanvas" class="preview-canvas"></canvas>
+        <canvas ref="previewCanvas" class="preview-canvas" :style="previewCanvasStyle"></canvas>
       </div>
       <div class="preview-meta">
         <div>
           <strong>Character</strong><br />
-          {{ state.character }} • {{ state.variant }}
+          {{ state.character }} - {{ state.variant }}
         </div>
         <div>
           <strong>Animation</strong><br />
@@ -59,7 +67,11 @@
         </div>
         <div>
           <strong>Frame Size</strong><br />
-          {{ state.spriteSize }}×{{ state.spriteSize }}
+          {{ state.spriteSize }}x{{ state.spriteSize }}
+        </div>
+        <div>
+          <strong>Display</strong><br />
+          {{ state.realSize ? "Real size" : "Scaled up" }}
         </div>
       </div>
     </section>
@@ -148,6 +160,7 @@ const state = reactive({
   animation: animationList[0],
   spriteSize: spriteSizes[2],
   fps: 8,
+  realSize: false,
 });
 
 const previewCanvas = ref(null);
@@ -178,6 +191,16 @@ const characterColors = computed(() => {
   };
 });
 
+const previewRenderSize = computed(() => (state.realSize ? state.spriteSize : previewDefaultSize));
+
+const previewCanvasStyle = computed(() => {
+  const pxSize = `${previewRenderSize.value}px`;
+  return {
+    width: pxSize,
+    height: pxSize,
+  };
+});
+
 const pose = reactive({
   bodyOffsetY: 0,
   headTilt: 0,
@@ -195,6 +218,7 @@ const pose = reactive({
   leftFoot: 0,
 });
 
+const previewDefaultSize = 260;
 const viewBoxSize = 200;
 const rootX = 100;
 const rootY = 70;
@@ -373,16 +397,22 @@ const buildLeg = (x, y, upperAngle, lowerAngle, footAngle, colors) => `
 const drawPreview = async () => {
   const canvas = previewCanvas.value;
   if (!canvas) return;
-  canvas.width = state.spriteSize;
-  canvas.height = state.spriteSize;
+
+  const renderSize = previewRenderSize.value;
+  canvas.width = renderSize;
+  canvas.height = renderSize;
 
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
   const svg = buildSVGMarkup(pose, characterColors.value);
   const img = await loadSvgImage(svg);
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, renderSize, renderSize);
+  ctx.drawImage(img, 0, 0, renderSize, renderSize);
+};
+
+const renderPreview = () => {
+  drawPreview().catch((error) => console.error("Preview draw failed", error));
 };
 
 const loadSvgImage = (svg) =>
@@ -402,7 +432,7 @@ const tick = (timestamp) => {
   Object.assign(pose, computePose(state.animation, t));
 
   animationFrame.value = Math.floor(t * frameCount);
-  drawPreview();
+  renderPreview();
   animationLoop.frameId = requestAnimationFrame(tick);
 };
 
@@ -448,6 +478,7 @@ const handleExport = async () => {
 onMounted(() => {
   animationLoop.startTime = performance.now();
   animationLoop.frameId = requestAnimationFrame(tick);
+  renderPreview();
 });
 
 onUnmounted(() => {
@@ -455,9 +486,9 @@ onUnmounted(() => {
 });
 
 watch(
-  () => [state.spriteSize, state.character, state.variant],
+  () => [state.spriteSize, state.character, state.variant, state.animation, state.fps, state.realSize],
   () => {
-    drawPreview();
+    renderPreview();
   }
 );
 </script>
